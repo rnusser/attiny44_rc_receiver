@@ -1,27 +1,32 @@
 /*
 ATtiny24/44/84 Pin map
                                   +-\/-+
-    nRF24L01  VCC, pin2 --- VCC  1|o   |14 GND --- nRF24L01  GND, pin1
-                            PB0  2|    |13 AREF
-                            PB1  3|    |12 PA1                        (Robert's)
-                            PB3  4|    |11 PA2 --- nRF24L01   CE pin3 (CSN  pin 4)
-                            PB2  5|    |10 PA3 --- nRF24L01  CSN pin4 (CE   pin 3)
-                            PA7  6|    |9  PA4 --- nRF24L01  SCK pin5 (SCK  pin 5)
-    nRF24L01 MOSI, pin7 --- PA6  7|    |8  PA5 --- nRF24L01 MISO pin6 (MOSI pin 6)
-    ( MISO pin7 )                 +----+
+                            VCC  1|o   |14 GND
+                            PB0  2|    |13 PA0  (AREF)
+                            PB1  3|    |12 PA1
+                            PB3  4|    |11 PA2
+                      (PWM) PB2  5|    |10 PA3
+        (Analog Input, PWM) PA7  6|    |9  PA4 (SCK)
+        (Analog input, PWM) PA6  7|    |8  PA5 (PWM, MOSI_slave )
+                                  +----+
 
-Using Clockwise pin numbering:
-   +-\/-+
-VCC|    |GND
- 10|    |0
-  9|    |1
- 11|    |2
-  8|    |3
-  7|    |4
-  6|    |5
-   +----+
+
+Connection to nRF24L01, servos and motor
+
+                        +-\/-+
+                  VCC  1|    |14 GND
+   roll servo --- PB0  2|    |13 PA0
+  pitch servo --- PB1  3|    |12 PA1
+                  PB3  4|    |11 PA2 --- nRF24L01 CSN
+          LED --- PB2  5|    |10 PA3 --- nRF24L01 CE
+        motor --- PA7  6|    |9  PA4 --- nRF24L01 SCK
+nRF24L01 MOSI --- PA6  7|    |8  PA5 --- nRF24L01 MOSI
+                        +----+
 
 */
+
+// Uploaded 30.09.2023
+
 #include <Servo_ATTinyCore.h>
 #include "RF24.h"
 
@@ -31,9 +36,10 @@ VCC|    |GND
 #define CE_PIN PIN_PA3  // 3 clockwise
 #define CSN_PIN PIN_PA2 // 2 clockwise
 
-#define LED PIN_PB2   // 8
+#define MOTOR PIN_PA7 // 8
 #define ROLL PIN_PB0  // 10
 #define PITCH PIN_PB1 // 9
+#define LED PIN_PB2   // 9
 
 RF24 radio(CE_PIN, CSN_PIN); // Create a Radio
 
@@ -54,73 +60,54 @@ PayloadStruct payload;
 Servo pitch_servo; // create servo object to control a servo
 Servo roll_servo;  // create servo object to control a servo
 
-int pos = 0; // variable to store the servo position
-
 void setup()
 {
   pitch_servo.attach(PITCH); // attaches the servo on pin 9 to the servo object
   roll_servo.attach(ROLL);   // attaches the servo on pin 9 to the servo object
+  pinMode(MOTOR, OUTPUT);
   pinMode(LED, OUTPUT);
 
   radio.begin();
   radio.openReadingPipe(1, address);
+
   radio.startListening();
-  digitalWrite(LED, HIGH);
   delay(1000);
   digitalWrite(LED, LOW);
-}
-
-void position_servos(PayloadStruct payload)
-{
-  pitch_servo.write(payload.pitch); // tell servo to go to position in variable 'pos'
-  roll_servo.write(payload.roll);   // tell servo to go to position in variable 'pos'
+  // initilize flashing LED
 }
 
 void loop()
 {
   while (radio.available())
   {
-    digitalWrite(LED, HIGH);
-    position_servos(payload);
+    radio.read(&payload, sizeof(payload));
+    update_hardware(payload);
     ppm_cnt = payload.ppm_cnt;
+    delay(10);
   }
-  digitalWrite(LED, LOW);
 
-  /*
   missing = (prev_cnt == ppm_cnt) ? missing += 1 : 0;
-  if (missing > 10)
+  if (missing > 1000)
   {
     // Time to fly in a circle
     ResetData();
-    position_servos(payload);
+    update_hardware(payload);
     missing = 0;
   }
-  prev_cnt = ppm_cnt = payload.ppm_cnt;
-  */
-  sweep();
+  prev_cnt = ppm_cnt;
 }
 
-void sweep()
+void update_hardware(PayloadStruct payload)
 {
-  digitalWrite(LED, HIGH);
-  for (pos = 0; pos <= 180; pos += 1)
-  { // goes from 0 degrees to 180 degrees
-    // in steps of 1 degree
-    roll_servo.write(pos); // tell servo to go to position in variable 'pos'
-    delay(15);             // waits 15ms for the servo to reach the position
-  }
-  digitalWrite(LED, LOW);
-  for (pos = 180; pos >= 0; pos -= 1)
-  {                        // goes from 180 degrees to 0 degrees
-    roll_servo.write(pos); // tell servo to go to position in variable 'pos'
-    delay(15);             // waits 15ms for the servo to reach the position
-  }
+  pitch_servo.write(payload.pitch); // tell servo to go to position in variable 'pos'
+  roll_servo.write(payload.roll);   // tell servo to go to position in variable 'pos'
+  analogWrite(MOTOR, payload.throttle);
 }
 
 void ResetData()
 {
-  payload.throttle = 127; // Center | Signal lost position / THR
-  payload.pitch = 127;    // Center | Signal lost position / ELV
-  payload.roll = 64;      // left | Signal lost position / AIL
-  payload.yaw = 127;      // Center | Signal lost position / RUD
+  payload.throttle = 0; // Center | Signal lost position / THR
+  payload.pitch = 127;  // Center | Signal lost position / ELV
+  payload.roll = 30;    // left | Signal lost position / AIL
+  payload.yaw = 127;    // Center | Signal lost position / RUD
 }
