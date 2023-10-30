@@ -1,11 +1,11 @@
 # DIY RC plane using the ATtiny44 with an nRF24L01 as a receiver
 
 * With an old ESky 0404 35MHz 4 channel radio controller to hand,  use the training port to get the PPM signals decoded - Working
-* Transmit the signals from the PPM decoding RX-Nano to another RX-Nano to test - Working
+* Transmit the decoded PPM signals using one RX-Nano to another RX-Nano to test - Working
 * Get ATtiny44 to receive the same signals - Working
 * Get ATtiny to drive a servo motor - Working
-* Create a circuit to drive the tiny motors - Currently using transistor, but will try using a mosfet to see if I can avoid the voltage drop.
-* Get the BMP180 pressure sensor working on ATtiny using soft I2C (SoftI2CMaster) - (because the SDA and SCL are being used for the nrf24l01) - to do later
+* Create a circuit so the ATtiny can drive the tiny motors - Currently using a transistor, but will try using a mosfet to see if I can reduce the voltage drop.
+* Get the BMP180 pressure sensor working with the ATtiny using soft I2C (SoftI2CMaster) - (because the SDA and SCL are being used for the nrf24l01) - to do later
 
 With my last update the PPM decoder and transmitter is working well.
 Now lacking some power in the motor.
