@@ -18,6 +18,7 @@ byte address[6] = "1Node";
 // byte addresses[][6] = {"1Node", "2Node"};
 
 int pos = 0; // variable to store the servo position
+bool send = true;
 
 unsigned long int a, b, c;
 int cnt;
@@ -35,13 +36,14 @@ struct Signal
     uint8_t ppm_cnt;
 };
 Signal data;
+Signal data_last;
 
 void ResetData()
 {
-    data.throttle = 127; // Center | Signal lost position / THR
-    data.pitch = 127;    // Center | Signal lost position / RUD
-    data.roll = 64;      // Center | Signal lost position / AIL
-    data.yaw = 127;      // Center | Signal lost position / ELE
+    data.throttle = 90; // Center | Signal lost position / THR
+    data.pitch = 90;    // Center | Signal lost position / RUD
+    data.roll = 90;     // Center | Signal lost position / AIL
+    data.yaw = 90;      // Center | Signal lost position / ELE
 }
 
 // D2 or D3 next to GND (2 or 3)
@@ -49,8 +51,9 @@ void ResetData()
 void setup()
 {
     Serial.begin(9600);
+    Serial.println("Booting");
     pinMode(2, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(2), read_me, FALLING);
+    attachInterrupt(digitalPinToInterrupt(2), read_me, RISING);
 
     // initialize the transceiver on the SPI bus
     if (!radio.begin())
@@ -68,10 +71,17 @@ void setup()
 
     // set the TX address of the RX node into the TX pipe
     radio.openWritingPipe(address); // always uses pipe 0
+
     radio.stopListening();
-    ResetData();
+    // ResetData();
+    // radio.write(&data, sizeof(data));
     ppm_cnt = 0;
 }
+
+// roll = ch[1]
+// pitch = ch[2]
+// throttle = ch[3]
+// yaw = ch[4]
 
 void loop()
 {
@@ -84,31 +94,32 @@ void loop()
     data.throttle = mapJoystickValues(ch[3], 104, 444, 792, false, false);
     data.ppm_cnt = ppm_cnt;
 
-    Serial.print("\ pitch: ");
-    Serial.print(ch[2]);
-    Serial.print(" -> ");
-    Serial.print(data.pitch);
+    send = send | abs(data_last.roll - data.roll) > 4 ? true : false;
+    send = send | abs(data_last.pitch - data.pitch) > 4 ? true : false;
+    send = send | abs(data_last.yaw - data.yaw) > 4 ? true : false;
+    send = send | abs(data_last.throttle - data.throttle) > 4 ? true : false;
 
-    Serial.print("\ roll: ");
-    Serial.print(ch[1]);
-    Serial.print(" -> ");
-    Serial.print(data.roll);
-
-    Serial.print("\ throttle: ");
-    Serial.print(ch[3]);
-    Serial.print(" -> ");
     Serial.print(data.throttle);
-
-    Serial.print("\	yaw: ");
-    Serial.print(ch[4]);
-    Serial.print(" -> ");
+    Serial.print(",");
+    Serial.print(data.pitch);
+    Serial.print(",");
+    Serial.print(data.roll);
+    Serial.print(",");
     Serial.print(data.yaw);
+    Serial.print(",");
+    Serial.println(send);
 
-    Serial.print(" ppm_cnt: ");
-    Serial.print(data.ppm_cnt);
-    Serial.print('\n');
-
-    radio.write(&data, sizeof(data));
+    if (send)
+    {
+        radio.write(&data, sizeof(data));
+    }
+    else
+    {
+        radio.write(&data_last, sizeof(data_last));
+    }
+    data_last = data;
+    send = false;
+    delay(10);
 }
 
 void read_me()
@@ -129,7 +140,7 @@ void read_me()
         i = 0;
     }
 
-    if (ppm_cnt < 255)
+    if (ppm_cnt < 250)
         ppm_cnt += 1;
     else
         ppm_cnt = 0;
@@ -146,7 +157,7 @@ void read_rc()
             cnt = j;
         }
     } // detecting separation  space 10000us in that another array
-    for (i = 1; i <= 6; i++)
+    for (i = 1; i <= 4; i++)
     {
         ch[i] = (ch1[i + j] - 1000);
     }
