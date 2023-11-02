@@ -15,15 +15,12 @@ RF24 radio(CE_PIN, CSN_PIN);
 
 // Let these addresses be used for the pair
 byte address[6] = "1Node";
-// byte addresses[][6] = {"1Node", "2Node"};
-// const uint64_t pipe = 0x1;
 
 int pos = 0; // variable to store the servo position
 
-unsigned long int a, b, c;
-int cnt;
-int x[15], ch1[15], ch[5], i;
-// specifing  arrays and variables to store values
+unsigned long int current, prev, period;
+// specify arrays and variables to store values
+int x[15], ch1[15], channels[5], i;
 uint8_t ppm_cnt;
 
 // uint8_t = byte
@@ -46,14 +43,11 @@ void ResetData()
 }
 
 // D2 or D3 next to GND (2 or 3)
-// four //// mean look at them later first lets keep it simple
 void setup()
 {
     Serial.begin(9600);
     pinMode(2, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(2), read_me, FALLING);
-    // myservo.attach(1); // attaches the servo on pin 9 to the servo object
-    // enabling interrupt at pin 2
 
     // initialize the transceiver on the SPI bus
     if (!radio.begin())
@@ -66,12 +60,10 @@ void setup()
     //// radio.setPALevel(RF24_PA_LOW); // RF24_PA_MAX is default.
 
     // save on transmission time by setting the radio to only transmit the
-    // number of bytes we need to transmit a float
+    // number of bytes we need to transmit
     //// radio.setPayloadSize(sizeof(payload)); // char[7] & uint8_t datatypes occupy 8 bytes
 
-    // set the TX address of the RX node into the TX pipe
-    // radio.openWritingPipe(address); // always uses pipe 0
-    radio.openWritingPipe(address); // always uses pipe 0
+    radio.openWritingPipe(address);
     radio.stopListening();
     ResetData();
     ppm_cnt = 0;
@@ -81,35 +73,32 @@ void loop()
 {
     read_rc();
 
-    // myservo.write(ch[1]);
-
     delay(100);
-    // check if larger than 1000 then do nothing
 
     // int mapJoystickValues(int val, int lower, int middle, int upper, bool reverse)
-    data.roll = mapJoystickValues(ch[1], 44, 488, 944, false);
-    data.pitch = mapJoystickValues(ch[2], 64, 500, 940, false); // "true" or "false" for servo direction
-    data.throttle = mapJoystickValues(ch[3], 104, 444, 792, false);
-    data.yaw = mapJoystickValues(ch[4], 36, 500, 936, true);
+    data.roll = mapJoystickValues(channels[1], 44, 488, 944, false);
+    data.pitch = mapJoystickValues(channels[2], 64, 500, 940, false); // "true" or "false" for servo direction
+    data.throttle = mapJoystickValues(channels[3], 104, 444, 792, false);
+    data.yaw = mapJoystickValues(channels[4], 36, 500, 936, true);
     data.ppm_cnt = ppm_cnt;
-    // radio.write(&pay, 1);
+
     Serial.print("\ pitch: ");
-    Serial.print(ch[2]);
+    Serial.print(channels[2]);
     Serial.print(" -> ");
     Serial.print(data.pitch);
 
     Serial.print("\ roll: ");
-    Serial.print(ch[1]);
+    Serial.print(channels[1]);
     Serial.print(" -> ");
     Serial.print(data.roll);
 
     Serial.print("\ throttle: ");
-    Serial.print(ch[3]);
+    Serial.print(channels[3]);
     Serial.print(" -> ");
     Serial.print(data.throttle);
 
     Serial.print("\	yaw: ");
-    Serial.print(ch[4]);
+    Serial.print(channels[4]);
     Serial.print(" -> ");
     Serial.print(data.yaw);
 
@@ -120,17 +109,18 @@ void loop()
     radio.write(&data, sizeof(data));
 }
 
+
 void read_me()
 {
     // this code reads value from RC reciever from PPM pin (Pin 2 or  3)
-    // this code gives channel values from 0-1000 values
-    //     -: ABHILASH  :-    //
-    a = micros(); // store time value a when pin value falling
-    c = a - b;    // calculating  time inbetween two peaks
-    b = a;        //
-    x[i] = c;     // storing 15 value in  array
+    // this code gives channel values from 0-1000
+    current = micros(); // store time value when pin value falls
+    period = current - prev;    // calculating time inbetween the two peaks
+    prev = current;        
+    x[i] = period;     
     i = i + 1;
-    if (i == 15)
+
+    if (i == 15)  // we will store 15 values in the array
     {
         for (int j = 0; j < 15; j++)
         {
@@ -138,6 +128,7 @@ void read_me()
         }
         i = 0;
     }
+
     if (ppm_cnt < 255)
     {
         ppm_cnt += 1;
@@ -146,24 +137,26 @@ void read_me()
     {
         ppm_cnt = 0;
     }
-} // copy  store all values from temporary array another array after 15 reading
+}
+
 
 void read_rc()
 {
     int i, j, k = 0;
+    // detecting separation space of 10000us in the array
     for (k = 14; k > -1; k--)
     {
         if (ch1[k] > 10000)
         {
             j = k;
-            cnt = j;
         }
-    } // detecting separation  space 10000us in that another array
+    } 
+    // assign 6 channel values after separation space
     for (i = 1; i <= 6; i++)
     {
-        ch[i] = (ch1[i + j] - 1000);
+        channels[i] = (ch1[i + j] - 1000);
     }
-} // assign 6 channel values after separation space
+}
 
 int mapJoystickValues(int val, int lower, int middle, int upper, bool reverse)
 {
@@ -174,4 +167,3 @@ int mapJoystickValues(int val, int lower, int middle, int upper, bool reverse)
         val = map(val, middle, upper, 128, 255);
     return (reverse ? 255 - val : val);
 }
-// Can we remove middle and if clause?
